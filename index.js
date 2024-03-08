@@ -4,22 +4,20 @@ const cors = require('cors')
 const { urlencoded } = require("body-parser"); //to get the post result from the html and more
 const mongoose = require("mongoose");
 require('dotenv').config()
-mongoose.connect(process.env.MONGO_URI, {
-  useNewUrlParser: true,
-  useUnifiedTopology: true,
-}); //logging into the database
+mongoose.connect(process.env.MONGO_URI); //logging into the database
 
 var exerciseSchema = new mongoose.Schema({
   userId: {type: String, required: true},
   description: {type: String, required: true},
   duration: {type: Number, required: true},
-  date: {type: Date, default: () => new Date()}
+  date: {type: String, default: () => new Date().toDateString()},
 })
 var exercise = mongoose.model("exercise",exerciseSchema);
 
 var userSchema = new mongoose.Schema({
   username: {type: String, required: true},
-  log: [exerciseSchema],
+  count: {type: Number, default: 0},
+  log: {type: [exerciseSchema], default : [],},
 });
 var user = mongoose.model("user", userSchema);
 
@@ -45,26 +43,39 @@ app.post("/api/users/:_id/exercises", async (req,res)=>{
   let description = req.body.description;
   let duration = req.body.duration;
   let date = new Date(req.body.date);
+  let dateString = date.toDateString()
   console.log("req.body.date is",req.body.date);
 
-  console.log("the date is",date);
+  console.log("the dateString is",date, "the typoe of dateString is",typeof(dateString));
   let savedExercise = await new exercise({description: description, duration: duration, userId: id}).save();
   console.log("saved exercise is",savedExercise.toJSON());
-  if(!(date == "Invalid Date")){ 
-    savedExercise.date = new Date(date);  
-     await savedExercise.save();
+  if(!(dateString == "Invalid Date")){ 
+    savedExercise.date =dateString;  
     }
+    await savedExercise.save();
   console.log("savedExercise.date is",savedExercise.date);
   let foundUser = await user.findOne({_id: id});
   foundUser.log.push(savedExercise);
+  foundUser.count= foundUser.count+1;
   await foundUser.save();
-  console.log("savedExercise.date is",savedExercise.date);
-  let dateString = savedExercise.date.toDateString();
-  console.log("dateString is",dateString);
-  let count = foundUser.log.length;
+ // console.log("savedExercise.date is",savedExercise.date);
+ // let dateString = savedExercise.date.toDateString();
+  //console.log("dateString is",dateString);
+  //let count = foundUser.log.length;
+
   //console.log( " Count is %d, date is %s",count,dateString);
-  res.json({_id: foundUser._id, username: foundUser.username, date:dateString, duration: savedExercise.duration, description: savedExercise.description, });
- // res.json({username: foundUser.username, count: count, _id: foundUser._id, log:[{description: savedExercise.description, duration: savedExercise.duration, date: dateString,}],});
+  res.json({_id: foundUser._id, username: foundUser.username, date: savedExercise.date, duration: savedExercise.duration, description: savedExercise.description, });
+  //res.json({username: foundUser.username, count: count, _id: foundUser._id, log:[{description: savedExercise.description, duration: savedExercise.duration, date: savedExercise.date,}],});
+  })
+
+  app.get("/api/users/:_id/logs",async (req,res)=>{
+    let id = req.params._id;
+    let foundUser = await user.findOne({_id: id});
+   // foundUser.count = foundUser.log.length;
+    await foundUser.save();
+    res.json({_id : foundUser.id, username: foundUser.username, count: foundUser.count, log: foundUser.log,});
+
+
   })
 
 
