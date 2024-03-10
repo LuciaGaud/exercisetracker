@@ -11,7 +11,7 @@ var exerciseSchema = new mongoose.Schema({
   description: { type: String, required: true },
   duration: { type: Number, required: true },
   date: { type: String, default: () => new Date().toDateString() },
-	dateISO: {type: Date, default: Date.now},
+  dateISO: { type: Date, default: Date.now },
 });
 var exercise = mongoose.model("exercise", exerciseSchema);
 
@@ -29,76 +29,90 @@ app.get("/", (req, res) => {
   res.sendFile(__dirname + "/views/index.html");
 });
 app.post("/api/users", async (req, res) => {
-  let nickname = req.body.username;
-  let savedUser = await new user({ username: nickname }).save();
-  res.json({ username: savedUser.username, _id: savedUser._id });
+  try {
+    let nickname = req.body.username;
+    let savedUser = await new user({ username: nickname }).save();
+    res.json({ username: savedUser.username, _id: savedUser._id });
+  } catch (err) {
+    res.status(500).send({ message: "Error creating user", error: err });
+  }
 });
 
 app.get("/api/users", async (req, res) => {
-  let data = await user.find({});
-  res.json(data);
+  try {
+    let data = await user.find({});
+    res.json(data);
+  } catch (err) {
+    res.status(500).send({ message: "Error fetching users", error: err });
+  }
 });
 
 app.post("/api/users/:_id/exercises", async (req, res) => {
-  let id = req.params._id;
-  let description = req.body.description;
-  let duration = req.body.duration;
-  let date = new Date(req.body.date || Date.now());
-  let dateString = date.toDateString();
-  // console.log("req.body.date is",req.body.date);
+  try {
+    let id = req.params._id;
+    let description = req.body.description;
+    let duration = parseInt(req.body.duration);
+    let date = req.body.date ? new Date(req.body.date) : new Date();
+    let dateString = date.toDateString();
 
-  //  console.log("the dateString is",date, "the typoe of dateString is",typeof(dateString));
-  let savedExercise = await new exercise({
-    description: description,
-    duration: duration,
-    userId: id,
-		date: dateString,
-		dateISO: date,
-  }).save();
+    let savedExercise = await new exercise({
+      userId: id,
+      description: description,
+      duration: duration,
+      date: dateString,
+      dateISO: date,
+    }).save();
 
-  await savedExercise.save();
-  // console.log("savedExercise.date is",savedExercise.date);
-  let foundUser = await user.findOne({ _id: id });
-  foundUser.log.push(savedExercise);
-  foundUser.count = foundUser.count + 1;
-  await foundUser.save();
+    let foundUser = await user.findOne({ _id: id });
+    if (!foundUser) {
+      return res.status(404).send({ message: "User not found" });
+    }
+    foundUser.log.push(savedExercise);
+    foundUser.count = foundUser.log.length;
+    await foundUser.save();
 
-
-  res.json({
-    _id: foundUser._id,
-    username: foundUser.username,
-    date: savedExercise.date,
-    duration: savedExercise.duration,
-    description: savedExercise.description,
-  });
- 
+    res.json({
+      _id: foundUser._id,
+      username: foundUser.username,
+      date: savedExercise.date,
+      duration: savedExercise.duration,
+      description: savedExercise.description,
+    });
+  } catch (err) {
+    res.status(500).send({ message: "Error adding exercise", error: err });
+  }
 });
 
 app.get("/api/users/:_id/logs", async (req, res) => {
-  let id = req.params._id;
-  let from = new Date(req.query.from || 0);
-  let to = new Date(req.query.to || Date.now());
-  let limit = req.query.limit || 0;
-  console.log("from, to, limit are", from, to, limit);
-  let foundUser = await user.findOne({ _id: id });
-  let filtered = await exercise
-    .find({
-      userId: id,
-      dateISO: {$gte: from, $lte: to,},
-    })
-    .select("description duration date")
-    .limit(limit)
-    .exec();
-  console.log(filtered);
-  console.log("_id type is", typeof foundUser._id);
+  try {
+    let id = req.params._id;
+    let from = new Date(req.query.from || 0);
+    let to = new Date(req.query.to || Date.now());
+    let limit = parseInt(req.query.limit) || 0;
 
-  await foundUser.save();
-  res.json({
-    _id: foundUser.id,
-    username: foundUser.username,
-    count: foundUser.count,
-    log: filtered,
-  });
+    let foundUser = await user.findOne({ _id: id });
+    if (!foundUser) {
+      return res.status(404).send({ message: "User not found" });
+    }
+
+    let filtered = await exercise
+      .find({
+        userId: id,
+        dateISO: { $gte: from, $lte: to },
+      })
+      .select("description duration date")
+      .limit(limit)
+      .exec();
+
+    res.json({
+      _id: foundUser._id,
+      username: foundUser.username,
+      count: foundUser.log.length,
+      log: filtered,
+    });
+  } catch (err) {
+    res.status(500).send({ message: "Error fetching exercise log", error: err });
+  }
 });
 
 const listener = app.listen(process.env.PORT || 3000, () => {
